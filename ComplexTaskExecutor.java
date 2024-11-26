@@ -10,10 +10,9 @@ public class ComplexTaskExecutor {
     private final int[] result;
     private int numberOfTasks;
 
-    public ComplexTaskExecutor(int numberOfTasks) {
-
-        this.cyclicBarrier = new CyclicBarrier(numberOfTasks);
-        this.executorService = Executors.newFixedThreadPool(numberOfTasks);
+    public ComplexTaskExecutor(int numberOfTasks, ExecutorService executorService) {
+        this.cyclicBarrier = new CyclicBarrier(numberOfTasks, this::combineResult);
+        this.executorService = executorService;
         this.result = new int[numberOfTasks];
         this.numberOfTasks = numberOfTasks;
     }
@@ -25,25 +24,16 @@ public class ComplexTaskExecutor {
                 try {
                     ComplexTask task = new ComplexTask(id);
                     result[id] = task.execute();
+                    
                     cyclicBarrier.await();
-                    combineResult();
                 } catch (InterruptedException | BrokenBarrierException e) {
                     Thread.currentThread().interrupt();
                 }
             });
         }
-        executorService.shutdown();
-        try {
-            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
-                executorService.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executorService.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
     }
 
-    private void combineResult() {
+    public void combineResult() {
         int total = 0;
         for (int el : result) {
             total += el;
@@ -52,7 +42,9 @@ public class ComplexTaskExecutor {
     }
 
     public static void main(String[] args) {
-        ComplexTaskExecutor taskExecutor = new ComplexTaskExecutor(5);
+        int numberOfTasks = 5;
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfTasks);
+        ComplexTaskExecutor taskExecutor = new ComplexTaskExecutor(numberOfTasks, executorService);
         Runnable testRunnable = () -> {
             System.out.println(Thread.currentThread().getName() + " started the test.");
 
@@ -72,6 +64,16 @@ public class ComplexTaskExecutor {
             thread2.join();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } finally {
+            executorService.shutdown();
+            try {
+                if (! executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executorService.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executorService.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
